@@ -1,0 +1,28 @@
+{
+  "name": "real-crm-for-realtors",
+  "version": "0.1.0",
+  "description": "Local-first Real Geeks-style CRM with realistic Ollama agent behavior",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "node --watch src/index.js",
+    "start": "node src/index.js",
+    "lint": "echo \"Lint not configured yet\"",
+    "test": "echo \"Tests not configured yet\"",
+    "export": "echo \"Export not implemented yet\""
+  },
+  "keywords": [
+    "crm",
+    "real-estate",
+    "realtors",
+    "local-first",
+    "ollama",
+    "lead-feed",
+    "real-geeks"
+  ],
+  "author": "",
+  "license": "MIT"
+}

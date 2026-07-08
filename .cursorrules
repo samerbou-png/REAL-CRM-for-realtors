@@ -1,0 +1,99 @@
+# REAL CRM for Realtors — Local Ollama Rules
+
+You are building a **local-first** real estate CRM inspired by Real Geeks, with **realistic AI agent behavior**. Read `docs/AGENT-BEHAVIOR.md` before implementing any agent or automation feature.
+
+## Product North Star
+
+Real Geeks answers: *Who do I call next?* and *What do I say?*
+
+We match that workflow (lead feed, activity alerts, reactive follow-up, drip nurture) but the AI is an **assistant**, not an autonomous agent impersonating the realtor.
+
+## AI Provider: Local Ollama Only
+
+- Endpoint: `http://127.0.0.1:11434/v1`
+- Model: `qwen2.5-coder:7b` (override via `OLLAMA_MODEL`)
+- Never send lead PII to cloud LLM APIs unless the user explicitly requests an optional cloud module.
+- Log which Ollama model produced each draft in the activity audit trail.
+
+## Realistic Agent Behavior (Mandatory)
+
+### Approval-first
+
+- AI creates **drafts** only. States: `draft` → `approved` → `sent` | `rejected`.
+- No auto-send, auto-schedule, or auto-post to leads.
+- Sending requires an explicit human action (button click).
+
+### Signal-driven triggers
+
+Reactive automation requires a concrete event:
+
+- Saved listing, repeat views, form submit, reply received, gone cold N days
+
+Do not build generic "check in" spam. Every automated suggestion must cite its trigger.
+
+### Confidence and escalation
+
+Ollama outputs should follow this schema when generating CRM actions:
+
+```json
+{
+  "summary": "string",
+  "suggested_action": "call | text | email | task",
+  "draft_message": "string | null",
+  "confidence": "high | medium | low",
+  "escalate": false,
+  "reason": "why this lead is prioritized"
+}
+```
+
+- `confidence: low` or `escalate: true` → create human task, no draft
+- Legal, financing, offer terms → always escalate, never auto-draft
+
+### Honesty constraints
+
+- Never invent MLS data, prices, availability, or property condition.
+- Never claim the AI toured a home or met the client.
+- If context is missing, say so — do not fill gaps with fiction.
+
+### Business realism
+
+- Respect quiet hours (default 9pm–8am local, configurable).
+- One clear CTA per draft message.
+- Tone: professional, warm, concise — like a busy realtor.
+
+## Local-First Data
+
+- Store CRM entities in `data/` as CSV or SQLite.
+- Keep `data/` gitignored. Never commit client records.
+- Lead feed scoring must be **explainable** (show why a lead ranks high).
+- Full audit trail in `activities.csv`: trigger → model → draft → human decision → outcome.
+
+## Real Estate Domain
+
+- Pipeline: `new` → `contacted` → `qualified` → `showing` → `offer` → `closed` | `lost`
+- Terminology: leads, listings, showings, buyers, sellers, closings, lead pond
+- Real Geeks parity targets: lead feed, reactive responses, drip workflows, activity alerts
+
+## Code Style
+
+- Node.js v22+, ES modules.
+- TypeScript for substantial modules.
+- Minimal dependencies. Small, focused diffs.
+
+## Forbidden
+
+- Autonomous impersonation of the human agent
+- Bulk unsolicited outreach
+- Cloud-only storage for core CRM data
+- Logging PII to console in production
+- Secrets in source code
+
+## Environment
+
+```bash
+OLLAMA_BASE_URL=http://127.0.0.1:11434/v1
+OLLAMA_MODEL=qwen2.5-coder:7b
+DATA_DIR=./data
+QUIET_HOURS_START=21
+QUIET_HOURS_END=8
+```
