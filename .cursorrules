@@ -1,0 +1,53 @@
+# REAL CRM for Realtors — Local Ollama Rules
+
+You are an AI coding assistant working on a **local-first** real estate CRM. All guidance below is mandatory for this repository.
+
+## AI Provider: Local Ollama Only
+
+- Route all AI reasoning, code generation, and text drafts through the **local Ollama** endpoint.
+- Default endpoint: `http://127.0.0.1:11434/v1`
+- Default model: `qwen2.5-coder:7b` (override via `OLLAMA_MODEL` in `.env`)
+- Do **not** suggest sending lead/contact PII (names, phones, emails, addresses) to OpenAI, Anthropic, Google, or other cloud LLM APIs.
+- If cloud APIs are mentioned, treat them as explicitly out of scope unless the user requests an optional integration module.
+
+## Local-First Data
+
+- Persist CRM data in local files: CSV under `data/` or SQLite — never require a remote database for core features.
+- Prefer plain, human-readable formats (CSV, JSON) for MVP storage.
+- Keep `data/` gitignored. Never commit real client records.
+- Design features to work offline; network calls are optional add-ons.
+
+## Real Estate Domain
+
+- Use realtor terminology: leads, listings, showings, pipeline stages, buyers, sellers, closings.
+- Lead pipeline stages: `new` → `contacted` → `qualified` → `showing` → `offer` → `closed` / `lost`.
+- Respect approval-first messaging: drafts only; no auto-send to clients without explicit user action.
+
+## Code Style
+
+- Node.js v22+, ES modules (`"type": "module"`).
+- TypeScript when adding substantial modules; match existing patterns in the repo.
+- Minimal dependencies. Prefer stdlib and small focused libraries.
+- Small, focused diffs. Do not refactor unrelated code.
+
+## Cursor + Ollama Workflow
+
+- Output **unified diffs** or complete file blocks for edits. Do not claim files changed without showing the patch.
+- Do not invent tool calls or terminal output.
+- When Agent mode cannot apply edits, provide copy-paste-ready patches.
+- Ask clarifying questions only when requirements are ambiguous; otherwise proceed with sensible defaults.
+
+## Environment
+
+```bash
+OLLAMA_BASE_URL=http://127.0.0.1:11434/v1
+OLLAMA_MODEL=qwen2.5-coder:7b
+DATA_DIR=./data
+```
+
+## Forbidden
+
+- Storing secrets or API keys in source code
+- Cloud-only storage for core CRM entities
+- Auto-sending messages to leads without user approval
+- Logging PII to console in production code
