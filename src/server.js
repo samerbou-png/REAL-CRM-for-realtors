@@ -22,6 +22,7 @@ import {
   listCampaignsWithMeta,
   processDueCampaignSteps,
 } from './services/campaigns.js';
+import { getPipeline } from './services/pipeline.js';
 
 const publicDir = resolve(import.meta.dirname, '../public');
 
@@ -103,6 +104,11 @@ export function createAppServer() {
 
       if (req.method === 'GET' && pathname === '/api/leads') {
         sendJson(res, 200, { leads: listLeads() });
+        return;
+      }
+
+      if (req.method === 'GET' && pathname === '/api/pipeline') {
+        sendJson(res, 200, getPipeline());
         return;
       }
 

@@ -20,6 +20,14 @@
     </header>
 
     <main>
+      <section class="panel panel-wide pipeline-panel">
+        <div class="panel-header">
+          <h2>Sales Pipeline</h2>
+          <span class="pipeline-total" id="pipeline-total"></span>
+        </div>
+        <div id="pipeline" class="pipeline-board empty">Loading…</div>
+      </section>
+
       <section class="panel panel-wide">
         <h2>Lead Feed</h2>
         <div id="feed" class="empty">Loading…</div>
@@ -47,6 +55,65 @@
           throw new Error(payload.error || 'Request failed');
         }
         return payload;
+      }
+
+      function formatRelativeTime(iso) {
+        if (!iso) {
+          return 'No activity';
+        }
+        const diff = Date.now() - new Date(iso).getTime();
+        const days = Math.floor(diff / (24 * 60 * 60 * 1000));
+        if (days === 0) {
+          return 'Today';
+        }
+        if (days === 1) {
+          return '1 day ago';
+        }
+        return `${days} days ago`;
+      }
+
+      function renderPipeline(pipeline) {
+        const container = document.getElementById('pipeline');
+        const totalNode = document.getElementById('pipeline-total');
+
+        totalNode.textContent = `${pipeline.total} lead${pipeline.total === 1 ? '' : 's'}`;
+
+        if (!pipeline.total) {
+          container.innerHTML = '<div class="empty">No leads in pipeline. Run <code>npm run seed</code>.</div>';
+          container.classList.add('empty');
+          return;
+        }
+
+        container.classList.remove('empty');
+        container.innerHTML = pipeline.stages
+          .map(
+            (stage, index) => `
+          <div class="pipeline-column" data-stage="${stage.id}">
+            <div class="pipeline-column-header">
+              <span class="pipeline-stage-label">${stage.label}</span>
+              <span class="pipeline-count">${stage.leads.length}</span>
+            </div>
+            ${index < pipeline.stages.length - 1 ? '<div class="pipeline-arrow" aria-hidden="true">→</div>' : ''}
+            <div class="pipeline-cards" data-stage="${stage.id}">
+              ${stage.leads
+                .map(
+                  (lead) => `
+                <article
+                  class="pipeline-card"
+                  draggable="true"
+                  data-lead-id="${lead.id}"
+                  data-stage="${stage.id}"
+                >
+                  <strong>${lead.first_name} ${lead.last_name}</strong>
+                  <div class="stage">${lead.source}</div>
+                  <div class="pipeline-meta">${formatRelativeTime(lead.last_activity_at)}</div>
+                </article>`,
+                )
+                .join('')}
+            </div>
+          </div>`,
+          )
+          .join('');
       }
 
       function renderFeed(feed) {
@@ -127,10 +194,11 @@
       }
 
       async function refresh() {
-        const [{ feed }, { approvals }, { campaigns }, health] = await Promise.all([
+        const [{ feed }, { approvals }, { campaigns }, pipeline, health] = await Promise.all([
           api('/api/feed?insights=1'),
           api('/api/approvals/pending'),
           api('/api/campaigns'),
+          api('/api/pipeline'),
           api('/api/health'),
         ]);
 
@@ -138,10 +206,78 @@
           ? 'Ollama connected'
           : 'Ollama offline (fallback insights)';
 
+        renderPipeline(pipeline);
         renderFeed(feed);
         renderApprovals(approvals);
         renderCampaigns(campaigns);
       }
+
+      let draggedLeadId = null;
+
+      document.getElementById('pipeline').addEventListener('dragstart', (event) => {
+        const card = event.target.closest('.pipeline-card');
+        if (!card) {
+          return;
+        }
+        draggedLeadId = card.dataset.leadId;
+        card.classList.add('dragging');
+        event.dataTransfer.effectAllowed = 'move';
+      });
+
+      document.getElementById('pipeline').addEventListener('dragend', (event) => {
+        const card = event.target.closest('.pipeline-card');
+        if (card) {
+          card.classList.remove('dragging');
+        }
+        draggedLeadId = null;
+        document.querySelectorAll('.pipeline-cards').forEach((column) => {
+          column.classList.remove('drag-over');
+        });
+      });
+
+      document.getElementById('pipeline').addEventListener('dragover', (event) => {
+        const column = event.target.closest('.pipeline-cards');
+        if (!column) {
+          return;
+        }
+        event.preventDefault();
+        event.dataTransfer.dropEffect = 'move';
+        column.classList.add('drag-over');
+      });
+
+      document.getElementById('pipeline').addEventListener('dragleave', (event) => {
+        const column = event.target.closest('.pipeline-cards');
+        if (column && !column.contains(event.relatedTarget)) {
+          column.classList.remove('drag-over');
+        }
+      });
+
+      document.getElementById('pipeline').addEventListener('drop', async (event) => {
+        const column = event.target.closest('.pipeline-cards');
+        if (!column || !draggedLeadId) {
+          return;
+        }
+        event.preventDefault();
+        column.classList.remove('drag-over');
+
+        const newStage = column.dataset.stage;
+        const card = document.querySelector(`.pipeline-card[data-lead-id="${draggedLeadId}"]`);
+        const oldStage = card?.dataset.stage;
+
+        if (!oldStage || oldStage === newStage) {
+          return;
+        }
+
+        try {
+          await api(`/api/leads/${draggedLeadId}`, {
+            method: 'PATCH',
+            body: JSON.stringify({ stage: newStage }),
+          });
+          await refresh();
+        } catch (error) {
+          alert(error.message);
+        }
+      });
 
       document.getElementById('process-cold').addEventListener('click', async () => {
         const result = await api('/api/cold-leads/process', { method: 'POST' });
