@@ -1,117 +1,126 @@
 # REAL CRM for Realtors
 
-A **local-first** customer relationship management system built for real estate professionals. Your leads, contacts, notes, and deal pipeline stay on your machine. AI assistance runs through **Ollama** on your own hardware — no client data is sent to cloud LLM providers by default.
+A **local-first** CRM inspired by [Real Geeks](https://www.realgeeks.com/) — lead feed, activity alerts, drip nurture, reactive follow-up — built for agents who want Real Geeks-style pipeline discipline **without** magical AI that pretends to be them.
 
-## Philosophy: Local-First
+Your leads, contacts, and deal history stay on your machine. AI runs through **Ollama** locally. Every outbound message is **drafted, not auto-sent**.
 
-This project follows local-first principles:
+## The Idea
 
-- **Your data, your device** — Contacts, leads, showings, and notes are stored in plain files (CSV) or SQLite on disk. You own the data and can back it up, diff it, or migrate it without vendor lock-in.
-- **Offline-capable** — Core CRM workflows work without an internet connection. Sync to external services is optional and explicit.
-- **Local AI by default** — Summaries, follow-up drafts, and lead scoring use Ollama models running at `http://127.0.0.1:11434`. Cloud APIs are never required for day-to-day use.
-- **Privacy for PII** — Names, phone numbers, emails, and property addresses are sensitive. The architecture keeps them out of third-party AI pipelines unless you deliberately opt in.
+Real Geeks helps agents answer: *Who should I call right now?* and *What do I say?*
 
-## Features (planned)
+REAL CRM does the same, but with **realistic agent behavior**:
 
-- Lead and contact management with pipeline stages
-- Property and showing tracking
-- Activity log and follow-up reminders
-- AI-assisted note summarization and outreach drafts (via Ollama)
-- CSV import/export for spreadsheets and backups
-- Optional upgrade path to SQLite for larger datasets
+| Real Geeks-style feature | How we handle it |
+|--------------------------|------------------|
+| **Lead Feed** | Priority queue ranked by behavior signals — with explainable scores |
+| **Activity alerts** | Lead saves listing, returns to site, goes quiet → task or draft |
+| **Reactive responses** | Triggered follow-ups, not random check-ins |
+| **Drip nurture** | Campaigns with human approval gates |
+| **Geek AI** | Local Ollama drafts + summaries; you hit send |
+| **Dialer / SMS** | Communication log first; provider integrations later |
+
+See [docs/AGENT-BEHAVIOR.md](./docs/AGENT-BEHAVIOR.md) for the full behavioral spec.
+
+## Philosophy
+
+### Local-first
+
+- Data lives in `data/` as CSV or SQLite — you own it, back it up, export it.
+- Core CRM works offline. Cloud sync is optional.
+- PII never leaves your machine for AI by default (Ollama at `127.0.0.1:11434`).
+
+### Realistic agents, not magic
+
+- AI is a **disciplined assistant**, not a replacement agent.
+- Drafts only. Humans approve, edit, or reject before anything goes out.
+- No invented listings, prices, or legal advice — escalate to the human instead.
+- Full audit trail: trigger → draft → decision → outcome.
+
+## Features (Roadmap)
+
+### Phase 1 — Command center
+
+- [ ] Lead feed with explainable priority scoring
+- [ ] Pipeline stages: `new` → `contacted` → `qualified` → `showing` → `offer` → `closed` / `lost`
+- [ ] Activity log (calls, texts, emails, notes, site events)
+- [ ] Approval queue for AI-drafted messages
+
+### Phase 2 — Reactive intelligence
+
+- [ ] Behavior triggers (saved listing, repeat views, form submit, gone cold)
+- [ ] Ollama summaries: "why this lead is hot" + suggested next action
+- [ ] Drip campaigns with per-step approval
+
+### Phase 3 — Integrations
+
+- [ ] SMS/email provider hooks (send only after approval click)
+- [ ] IDX / MLS read-only feeds (never hallucinate inventory)
+- [ ] Mobile-friendly dashboard
 
 ## Prerequisites
 
-- **Node.js** v22 or later
+- **Node.js** v22+
 - **Ollama** — [https://ollama.com](https://ollama.com)
-- **Cursor** (recommended) — configured to use your local Ollama endpoint
+- **Cursor** (recommended) with local Ollama endpoint
 
-### Recommended Ollama models
+### Recommended models
 
 ```bash
-ollama pull qwen2.5-coder:7b    # Fast coding and text tasks
-ollama pull llama3.1:8b         # General reasoning and drafts
-ollama pull nomic-embed-text    # Embeddings for search (optional)
+ollama pull qwen2.5-coder:7b    # Fast drafts and structured output
+ollama pull llama3.1:8b         # Summaries and reasoning
+ollama pull nomic-embed-text    # Semantic search (optional)
 ```
 
 ## Quick Start
-
-### 1. Clone and install
 
 ```bash
 git clone https://github.com/samerbou-png/REAL-CRM-for-realtors.git
 cd REAL-CRM-for-realtors
 npm install
-```
-
-### 2. Start Ollama
-
-```bash
-ollama serve
-```
-
-Verify a model is available:
-
-```bash
-ollama list
-```
-
-### 3. Configure environment
-
-```bash
 cp .env.example .env
-```
-
-Edit `.env` with your local settings:
-
-```bash
-OLLAMA_BASE_URL=http://127.0.0.1:11434/v1
-OLLAMA_MODEL=qwen2.5-coder:7b
-DATA_DIR=./data
-```
-
-### 4. Run the app
-
-```bash
+ollama serve
 npm run dev
 ```
 
 ## Data Storage
 
-Local-first storage uses files under `data/` (gitignored):
+Local files under `data/` (gitignored):
 
 | File | Purpose |
 |------|---------|
-| `data/leads.csv` | Lead records and pipeline status |
-| `data/contacts.csv` | Contact details and channel mappings |
-| `data/properties.csv` | Listings and showing history |
-| `data/activities.csv` | Calls, emails, notes, and audit trail |
+| `data/leads.csv` | Leads, pipeline stage, priority score |
+| `data/contacts.csv` | Contact details and channels |
+| `data/properties.csv` | Saved listings and showing history |
+| `data/activities.csv` | Events, drafts, approvals, audit trail |
+| `data/campaigns.csv` | Drip sequences and step status |
 
-Export anytime:
+## Agent Loop
 
-```bash
-npm run export
+```
+Activity event → Rank in Lead Feed → Ollama drafts next action
+    → Human approves/edits/rejects → Send → Log outcome
 ```
 
-## Cursor + Ollama Setup
+Low-confidence or sensitive situations skip the draft and create a **"call personally"** task instead.
 
-Cursor does not reach `localhost` directly from cloud agents. For **local development on your machine**:
+## Cursor + Ollama
 
-1. Open **Settings → Models**
-2. Add an OpenAI-compatible provider
-3. Set **Base URL** to `http://127.0.0.1:11434/v1` (or your ngrok/Cloudflare tunnel URL if using remote Cursor)
-4. Set **API Key** to any non-empty string (e.g. `ollama`)
-5. Select your Ollama model in the chat dropdown
+1. **Settings → Models** → OpenAI-compatible provider
+2. Base URL: `http://127.0.0.1:11434/v1`
+3. API key: any non-empty string (e.g. `ollama`)
+4. Select your local model in chat
 
-Project rules live in `.cursorrules` at the repo root. They enforce local-first and Ollama-only AI assistance for this codebase.
+Project rules: `.cursorrules` — local Ollama only, approval-first, realistic agent patterns.
 
 ## Project Structure
 
 ```
 REAL-CRM-for-realtors/
-├── .cursorrules       # Local Ollama rules for Cursor
-├── data/              # Local CSV/SQLite storage (gitignored)
-├── src/               # Application source (coming soon)
+├── .cursorrules
+├── docs/
+│   └── AGENT-BEHAVIOR.md   # Behavioral spec (read this first)
+├── data/                   # Local storage (gitignored)
+├── src/                    # Application source
 ├── package.json
 └── README.md
 ```
@@ -126,9 +135,9 @@ npm run test     # Run tests
 
 ## Security
 
-- Never commit `.env` or files under `data/`
-- Do not paste client PII into cloud AI chats; use local Ollama only
-- Back up `data/` regularly to encrypted storage
+- Never commit `.env` or `data/`
+- No client PII in cloud AI chats
+- Encrypt backups of `data/`
 
 ## License
 

@@ -1,7 +1,7 @@
 {
   "name": "real-crm-for-realtors",
   "version": "0.1.0",
-  "description": "Local-first CRM for real estate professionals with Ollama-powered AI",
+  "description": "Local-first Real Geeks-style CRM with realistic Ollama agent behavior",
   "private": true,
   "type": "module",
   "engines": {
@@ -19,7 +19,9 @@
     "real-estate",
     "realtors",
     "local-first",
-    "ollama"
+    "ollama",
+    "lead-feed",
+    "real-geeks"
   ],
   "author": "",
   "license": "MIT"
