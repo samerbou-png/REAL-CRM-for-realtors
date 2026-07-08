@@ -3,10 +3,11 @@ import { listActivitiesForLead } from './activities.js';
 import { getLead } from './leads.js';
 import { queueDraft } from './approvals.js';
 import { logActivity } from './activities.js';
+import { scoreLead } from './leadFeed.js';
 
 const SENSITIVE_KEYWORDS = ['legal', 'financing', 'mortgage', 'offer', 'contract', 'lawsuit'];
 
-function isQuietHours(date = new Date()) {
+export function isQuietHours(date = new Date()) {
   const hour = Number(
     new Intl.DateTimeFormat('en-US', {
       hour: 'numeric',
@@ -29,7 +30,37 @@ function containsSensitiveTopic(text) {
   return SENSITIVE_KEYWORDS.some((keyword) => lower.includes(keyword));
 }
 
-function buildPrompt(lead, activities, trigger) {
+function personalize(template, lead) {
+  const name = lead.first_name || 'there';
+  return template.replaceAll('{{first_name}}', name);
+}
+
+export async function requestOllamaJson(prompt) {
+  const response = await fetch(`${config.ollamaBaseUrl}/chat/completions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: config.ollamaModel,
+      messages: [
+        { role: 'system', content: 'Return valid JSON only.' },
+        { role: 'user', content: prompt },
+      ],
+      temperature: 0.2,
+      stream: false,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Ollama request failed: ${response.status}`);
+  }
+
+  const payload = await response.json();
+  const content = payload.choices?.[0]?.message?.content ?? '';
+  const jsonText = content.match(/\{[\s\S]*\}/)?.[0] ?? content;
+  return JSON.parse(jsonText);
+}
+
+function buildActionPrompt(lead, activities, trigger) {
   const facts = [
     `Name: ${lead.first_name} ${lead.last_name}`.trim(),
     lead.email ? `Email: ${lead.email}` : null,
@@ -58,29 +89,23 @@ Respond with JSON only:
 }`;
 }
 
-async function callOllama(prompt) {
-  const response = await fetch(`${config.ollamaBaseUrl}/chat/completions`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: config.ollamaModel,
-      messages: [
-        { role: 'system', content: 'Return valid JSON only.' },
-        { role: 'user', content: prompt },
-      ],
-      temperature: 0.2,
-      stream: false,
-    }),
-  });
+function buildInsightPrompt(lead, scoring, activities) {
+  return `You are an assistant to a licensed realtor. Summarize why this lead needs attention using only the facts below.
 
-  if (!response.ok) {
-    throw new Error(`Ollama request failed: ${response.status}`);
-  }
+Lead: ${lead.first_name} ${lead.last_name}
+Stage: ${lead.stage}
+Priority score: ${scoring.priority_score}
+Reasons: ${scoring.reasons.join('; ')}
+Notes: ${lead.notes || 'none'}
+Recent activity:
+${activities.slice(0, 6).map((activity) => `- ${activity.summary || activity.trigger}`).join('\n')}
 
-  const payload = await response.json();
-  const content = payload.choices?.[0]?.message?.content ?? '';
-  const jsonText = content.match(/\{[\s\S]*\}/)?.[0] ?? content;
-  return JSON.parse(jsonText);
+Respond with JSON only:
+{
+  "headline": "short why-this-lead-is-hot line",
+  "next_action": "call|text|email|task",
+  "talking_point": "one sentence the agent can use on a call"
+}`;
 }
 
 function fallbackSuggestion(lead, trigger) {
@@ -95,7 +120,41 @@ function fallbackSuggestion(lead, trigger) {
   };
 }
 
-export async function suggestNextAction(leadId, trigger) {
+function fallbackInsight(lead, scoring) {
+  const topReason = scoring.reasons[0] ?? 'recent activity';
+  return {
+    headline: `${lead.first_name} is prioritized because of ${topReason}.`,
+    next_action: 'call',
+    talking_point: `Reference ${topReason} and ask about their timeline.`,
+  };
+}
+
+export async function summarizeLead(leadId) {
+  const lead = getLead(leadId);
+  if (!lead) {
+    throw new Error(`Lead not found: ${leadId}`);
+  }
+
+  const activities = listActivitiesForLead(leadId);
+  const scoring = scoreLead(lead, activities);
+
+  try {
+    const insight = await requestOllamaJson(buildInsightPrompt(lead, scoring, activities));
+    return {
+      lead_id: leadId,
+      model: config.ollamaModel,
+      ...insight,
+    };
+  } catch {
+    return {
+      lead_id: leadId,
+      model: 'fallback',
+      ...fallbackInsight(lead, scoring),
+    };
+  }
+}
+
+export async function suggestNextAction(leadId, trigger, options = {}) {
   const lead = getLead(leadId);
   if (!lead) {
     throw new Error(`Lead not found: ${leadId}`);
@@ -122,10 +181,21 @@ export async function suggestNextAction(leadId, trigger) {
   }
 
   let suggestion;
-  try {
-    suggestion = await callOllama(buildPrompt(lead, activities, trigger));
-  } catch {
-    suggestion = fallbackSuggestion(lead, trigger);
+  if (options.draft_template) {
+    suggestion = {
+      summary: options.summary ?? `Follow up for ${trigger}`,
+      suggested_action: options.channel === 'email' ? 'email' : 'text',
+      draft_message: personalize(options.draft_template, lead),
+      confidence: 'medium',
+      escalate: false,
+      reason: options.reason ?? trigger,
+    };
+  } else {
+    try {
+      suggestion = await requestOllamaJson(buildActionPrompt(lead, activities, trigger));
+    } catch {
+      suggestion = fallbackSuggestion(lead, trigger);
+    }
   }
 
   if (suggestion.escalate || suggestion.confidence === 'low' || suggestion.suggested_action === 'task') {
@@ -155,6 +225,8 @@ export async function suggestNextAction(leadId, trigger) {
     confidence: suggestion.confidence,
     reason: suggestion.reason,
     model: config.ollamaModel,
+    enrollment_id: options.enrollment_id ?? '',
+    step_id: options.step_id ?? '',
   });
 
   return {

@@ -11,6 +11,7 @@ export const config = {
   quietHoursStart: Number(process.env.QUIET_HOURS_START ?? 21),
   quietHoursEnd: Number(process.env.QUIET_HOURS_END ?? 8),
   timezone: process.env.TZ ?? 'America/New_York',
+  coldLeadDays: Number(process.env.COLD_LEAD_DAYS ?? 7),
 };
 
 export function ensureDataDir() {

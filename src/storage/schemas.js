@@ -35,8 +35,42 @@ export const APPROVAL_HEADERS = [
   'final_message',
   'confidence',
   'reason',
+  'enrollment_id',
+  'step_id',
   'created_at',
   'decided_at',
+];
+
+export const CAMPAIGN_HEADERS = ['id', 'name', 'enabled', 'created_at'];
+
+export const CAMPAIGN_STEP_HEADERS = [
+  'id',
+  'campaign_id',
+  'step_order',
+  'channel',
+  'delay_days',
+  'summary',
+  'draft_template',
+  'created_at',
+];
+
+export const ENROLLMENT_HEADERS = [
+  'id',
+  'campaign_id',
+  'lead_id',
+  'status',
+  'current_step',
+  'pending_approval_id',
+  'enrolled_at',
+  'next_step_at',
+  'completed_at',
+];
+
+export const ENROLLMENT_STATUSES = [
+  'active',
+  'pending_approval',
+  'paused',
+  'completed',
 ];
 
 export const PIPELINE_STAGES = [

@@ -1,5 +1,6 @@
 import { listActivitiesForLead } from './activities.js';
 import { listLeads } from './leads.js';
+import { summarizeLead } from './ollama.js';
 
 const STAGE_URGENCY = {
   offer: 20,
@@ -18,6 +19,7 @@ const INTENT_WEIGHTS = {
   returned_after_idle: 10,
   replied: 18,
   call_requested: 16,
+  gone_cold: 14,
 };
 
 function hoursSince(isoDate) {
@@ -139,4 +141,19 @@ export function getLeadFeed({ limit = 10, includeClosed = false } = {}) {
 
   feed.sort((a, b) => b.priority_score - a.priority_score || b.last_activity_at.localeCompare(a.last_activity_at));
   return feed.slice(0, limit);
+}
+
+export async function getLeadFeedWithInsights({ limit = 10, includeClosed = false } = {}) {
+  const feed = getLeadFeed({ limit, includeClosed });
+  const enriched = [];
+
+  for (const lead of feed) {
+    const insight = await summarizeLead(lead.id);
+    enriched.push({
+      ...lead,
+      ai_insight: insight,
+    });
+  }
+
+  return enriched;
 }

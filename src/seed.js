@@ -1,10 +1,14 @@
 import { ensureDataDir } from './config.js';
-import { createLead } from './services/leads.js';
+import { createLead, updateLead } from './services/leads.js';
 import { logActivity } from './services/activities.js';
 import { queueDraft } from './services/approvals.js';
+import {
+  createCampaign,
+  addCampaignStep,
+  enrollLead,
+} from './services/campaigns.js';
 
 const daysAgo = (days) => new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
-const hoursAgo = (hours) => new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
 
 export function seedDemoData() {
   ensureDataDir();
@@ -41,6 +45,19 @@ export function seedDemoData() {
     notes: 'Investor, cash buyer.',
     last_touch_at: '',
   });
+
+  const dana = createLead({
+    first_name: 'Dana',
+    last_name: 'Kim',
+    email: 'dana.kim@example.com',
+    phone: '555-0104',
+    stage: 'contacted',
+    source: 'website',
+    notes: 'Browsed condos last month, then went quiet.',
+    last_touch_at: daysAgo(10),
+  });
+
+  updateLead(dana.id, { last_activity_at: daysAgo(9), last_touch_at: daysAgo(10) });
 
   logActivity({
     lead_id: maria.id,
@@ -81,6 +98,8 @@ export function seedDemoData() {
     metadata: { idle_days: 10 },
   });
 
+  updateLead(dana.id, { last_activity_at: daysAgo(9), last_touch_at: daysAgo(10) });
+
   queueDraft({
     lead_id: maria.id,
     channel: 'text',
@@ -103,10 +122,33 @@ export function seedDemoData() {
     reason: 'intent: form submit + showing stage',
   });
 
-  return { maria, james, avery };
+  const nurture = createCampaign({ name: 'New Lead Welcome' });
+  addCampaignStep(nurture.id, {
+    step_order: 1,
+    channel: 'text',
+    delay_days: 0,
+    summary: 'Welcome message for new leads',
+    draft_template: 'Hi {{first_name}}, thanks for reaching out. What neighborhoods are you considering?',
+  });
+  addCampaignStep(nurture.id, {
+    step_order: 2,
+    channel: 'text',
+    delay_days: 3,
+    summary: 'Day 3 check-in',
+    draft_template: 'Hi {{first_name}}, just checking in — still exploring homes or ready to tour a few options?',
+  });
+  enrollLead(nurture.id, avery.id);
+
+  return { maria, james, avery, dana, nurture };
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   const leads = seedDemoData();
-  console.log('Seeded demo data:', Object.values(leads).map((lead) => `${lead.first_name} ${lead.last_name}`).join(', '));
+  console.log(
+    'Seeded demo data:',
+    [leads.maria, leads.james, leads.avery, leads.dana]
+      .map((lead) => `${lead.first_name} ${lead.last_name}`)
+      .join(', '),
+  );
+  console.log('Campaign:', leads.nurture.name);
 }

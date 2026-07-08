@@ -7,6 +7,7 @@ const TRIGGERS = {
   repeat_view: 'Lead viewed a listing again',
   returned_after_idle: 'Lead returned after being idle',
   replied: 'Lead replied to a message',
+  gone_cold: 'Lead has gone cold',
 };
 
 export async function recordSiteEvent(leadId, trigger, summary = '') {

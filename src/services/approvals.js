@@ -4,6 +4,10 @@ import { config, ensureDataDir } from '../config.js';
 import { createId, nowIso } from '../lib/id.js';
 import { logActivity } from './activities.js';
 import { touchLead } from './leads.js';
+import {
+  advanceEnrollmentAfterSend,
+  resumeEnrollmentAfterReject,
+} from './campaigns.js';
 
 function approvalsFile() {
   return dataPath(config.dataDir, 'approvals.csv');
@@ -43,6 +47,8 @@ export function queueDraft(input) {
     final_message: '',
     confidence: input.confidence ?? 'medium',
     reason: input.reason ?? '',
+    enrollment_id: input.enrollment_id ?? '',
+    step_id: input.step_id ?? '',
     created_at: nowIso(),
     decided_at: '',
   };
@@ -137,6 +143,7 @@ export function rejectDraft(approvalId, reason = '') {
     metadata: { approval_id: approval.id, status: 'rejected', reason },
   });
 
+  resumeEnrollmentAfterReject(approvalId);
   return approval;
 }
 
@@ -166,5 +173,6 @@ export function markSent(approvalId) {
   });
 
   touchLead(approval.lead_id, { touched: true });
+  advanceEnrollmentAfterSend(approvalId);
   return approval;
 }

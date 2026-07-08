@@ -10,13 +10,17 @@
     <header>
       <div>
         <h1>REAL CRM</h1>
-        <p>Local-first lead feed with approval-first drafts</p>
+        <p>Reactive intelligence with approval-first drafts</p>
       </div>
-      <div class="badge" id="health">Checking Ollama…</div>
+      <div class="header-actions">
+        <button class="secondary" id="process-cold">Process Cold Leads</button>
+        <button class="secondary" id="process-campaigns">Process Drips</button>
+        <div class="badge" id="health">Checking Ollama…</div>
+      </div>
     </header>
 
     <main>
-      <section class="panel">
+      <section class="panel panel-wide">
         <h2>Lead Feed</h2>
         <div id="feed" class="empty">Loading…</div>
       </section>
@@ -24,6 +28,11 @@
       <section class="panel">
         <h2>Approval Queue</h2>
         <div id="approvals" class="empty">Loading…</div>
+      </section>
+
+      <section class="panel">
+        <h2>Drip Campaigns</h2>
+        <div id="campaigns" class="empty">Loading…</div>
       </section>
     </main>
 
@@ -58,6 +67,8 @@
               </div>
               <div class="score">${lead.priority_score}</div>
             </div>
+            ${lead.ai_insight ? `<p class="insight"><strong>AI:</strong> ${lead.ai_insight.headline}</p>` : ''}
+            ${lead.ai_insight ? `<p class="talking-point">Next: ${lead.ai_insight.next_action} — ${lead.ai_insight.talking_point}</p>` : ''}
             <ul class="reasons">
               ${lead.reasons.map((reason) => `<li>${reason}</li>`).join('')}
             </ul>
@@ -94,20 +105,55 @@
           .join('');
       }
 
+      function renderCampaigns(campaigns) {
+        const container = document.getElementById('campaigns');
+        if (!campaigns.length) {
+          container.innerHTML = '<div class="empty">No campaigns yet.</div>';
+          return;
+        }
+
+        container.innerHTML = campaigns
+          .map(
+            (campaign) => `
+          <article class="campaign-card">
+            <strong>${campaign.name}</strong>
+            <div class="stage">${campaign.steps.length} steps · ${campaign.enrollments.length} enrolled</div>
+            <ul class="reasons">
+              ${campaign.steps.map((step) => `<li>Step ${step.step_order}: ${step.summary} (+${step.delay_days}d)</li>`).join('')}
+            </ul>
+          </article>`,
+          )
+          .join('');
+      }
+
       async function refresh() {
-        const [{ feed }, { approvals }, health] = await Promise.all([
-          api('/api/feed'),
+        const [{ feed }, { approvals }, { campaigns }, health] = await Promise.all([
+          api('/api/feed?insights=1'),
           api('/api/approvals/pending'),
+          api('/api/campaigns'),
           api('/api/health'),
         ]);
 
         document.getElementById('health').textContent = health.ollama
           ? 'Ollama connected'
-          : 'Ollama offline (fallback drafts)';
+          : 'Ollama offline (fallback insights)';
 
         renderFeed(feed);
         renderApprovals(approvals);
+        renderCampaigns(campaigns);
       }
+
+      document.getElementById('process-cold').addEventListener('click', async () => {
+        const result = await api('/api/cold-leads/process', { method: 'POST' });
+        alert(`Processed ${result.processed} gone-cold lead(s).`);
+        await refresh();
+      });
+
+      document.getElementById('process-campaigns').addEventListener('click', async () => {
+        const result = await api('/api/campaigns/process', { method: 'POST' });
+        alert(`Queued ${result.processed} drip draft(s) for approval.`);
+        await refresh();
+      });
 
       document.body.addEventListener('click', async (event) => {
         const button = event.target.closest('button[data-action]');

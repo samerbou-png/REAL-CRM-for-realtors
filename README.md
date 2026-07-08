@@ -47,9 +47,9 @@ See [docs/AGENT-BEHAVIOR.md](./docs/AGENT-BEHAVIOR.md) for the full behavioral s
 
 ### Phase 2 — Reactive intelligence
 
-- [ ] Behavior triggers (saved listing, repeat views, form submit, gone cold)
-- [ ] Ollama summaries: "why this lead is hot" + suggested next action
-- [ ] Drip campaigns with per-step approval
+- [x] Behavior triggers (saved listing, repeat views, form submit, gone cold)
+- [x] Ollama summaries: "why this lead is hot" + suggested next action
+- [x] Drip campaigns with per-step approval
 
 ### Phase 3 — Integrations
 
@@ -86,8 +86,11 @@ npm run dev     # http://localhost:3000
 ### CLI
 
 ```bash
-npm run cli feed 10      # ranked lead feed in terminal
-npm run cli approvals    # pending drafts
+npm run cli feed --insights   # feed with Ollama insight lines
+npm run cli cold              # list gone-cold leads
+npm run cli process-cold      # queue drafts for cold leads
+npm run cli campaigns         # list drip campaigns
+npm run cli process-campaigns # queue due drip steps for approval
 ```
 
 ## Data Storage

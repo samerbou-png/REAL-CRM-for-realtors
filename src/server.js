@@ -2,7 +2,7 @@ import { createServer } from 'node:http';
 import { readFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { config, ensureDataDir } from './config.js';
-import { getLeadFeed } from './services/leadFeed.js';
+import { getLeadFeed, getLeadFeedWithInsights } from './services/leadFeed.js';
 import { createLead, getLead, listLeads, updateLead } from './services/leads.js';
 import { listActivitiesForLead, logActivity } from './services/activities.js';
 import {
@@ -13,7 +13,15 @@ import {
   rejectDraft,
 } from './services/approvals.js';
 import { recordSiteEvent, listSupportedTriggers } from './services/reactive.js';
-import { isOllamaAvailable } from './services/ollama.js';
+import { isOllamaAvailable, summarizeLead } from './services/ollama.js';
+import { findGoneColdLeads, processGoneColdLeads } from './services/coldLeads.js';
+import {
+  createCampaign,
+  addCampaignStep,
+  enrollLead,
+  listCampaignsWithMeta,
+  processDueCampaignSteps,
+} from './services/campaigns.js';
 
 const publicDir = resolve(import.meta.dirname, '../public');
 
@@ -78,7 +86,18 @@ export function createAppServer() {
 
       if (req.method === 'GET' && pathname === '/api/feed') {
         const limit = Number(url.searchParams.get('limit') ?? 10);
-        sendJson(res, 200, { feed: getLeadFeed({ limit }) });
+        const insights = url.searchParams.get('insights') === '1';
+        const feed = insights
+          ? await getLeadFeedWithInsights({ limit })
+          : getLeadFeed({ limit });
+        sendJson(res, 200, { feed });
+        return;
+      }
+
+      if (req.method === 'GET' && pathname.startsWith('/api/leads/') && pathname.endsWith('/insight')) {
+        const leadId = pathname.split('/')[3];
+        const insight = await summarizeLead(leadId);
+        sendJson(res, 200, { insight });
         return;
       }
 
@@ -88,7 +107,12 @@ export function createAppServer() {
       }
 
       if (req.method === 'GET' && pathname.startsWith('/api/leads/')) {
-        const leadId = pathname.split('/').pop();
+        const parts = pathname.split('/');
+        const leadId = parts[3];
+        if (parts[4]) {
+          sendJson(res, 404, { error: 'Not found' });
+          return;
+        }
         const lead = getLead(leadId);
         if (!lead) {
           sendJson(res, 404, { error: 'Lead not found' });
@@ -194,6 +218,51 @@ export function createAppServer() {
 
       if (req.method === 'GET' && pathname === '/api/triggers') {
         sendJson(res, 200, { triggers: listSupportedTriggers() });
+        return;
+      }
+
+      if (req.method === 'GET' && pathname === '/api/cold-leads') {
+        sendJson(res, 200, { cold_leads: findGoneColdLeads() });
+        return;
+      }
+
+      if (req.method === 'POST' && pathname === '/api/cold-leads/process') {
+        const results = await processGoneColdLeads();
+        sendJson(res, 200, { processed: results.length, results });
+        return;
+      }
+
+      if (req.method === 'GET' && pathname === '/api/campaigns') {
+        sendJson(res, 200, { campaigns: listCampaignsWithMeta() });
+        return;
+      }
+
+      if (req.method === 'POST' && pathname === '/api/campaigns') {
+        const body = await readJson(req);
+        const campaign = createCampaign(body);
+        sendJson(res, 201, { campaign });
+        return;
+      }
+
+      if (req.method === 'POST' && pathname.startsWith('/api/campaigns/') && pathname.endsWith('/steps')) {
+        const campaignId = pathname.split('/')[3];
+        const body = await readJson(req);
+        const step = addCampaignStep(campaignId, body);
+        sendJson(res, 201, { step });
+        return;
+      }
+
+      if (req.method === 'POST' && pathname.startsWith('/api/campaigns/') && pathname.endsWith('/enroll')) {
+        const campaignId = pathname.split('/')[3];
+        const body = await readJson(req);
+        const enrollment = enrollLead(campaignId, body.lead_id);
+        sendJson(res, 201, { enrollment });
+        return;
+      }
+
+      if (req.method === 'POST' && pathname === '/api/campaigns/process') {
+        const results = await processDueCampaignSteps();
+        sendJson(res, 200, { processed: results.length, results });
         return;
       }
 
