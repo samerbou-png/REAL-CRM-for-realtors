@@ -10,9 +10,9 @@
   "scripts": {
     "dev": "node --watch src/index.js",
     "start": "node src/index.js",
-    "lint": "echo \"Lint not configured yet\"",
-    "test": "echo \"Tests not configured yet\"",
-    "export": "echo \"Export not implemented yet\""
+    "seed": "node src/seed.js",
+    "cli": "node src/cli.js",
+    "test": "node --test tests/**/*.test.js"
   },
   "keywords": [
     "crm",

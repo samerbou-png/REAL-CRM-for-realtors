@@ -40,10 +40,10 @@ See [docs/AGENT-BEHAVIOR.md](./docs/AGENT-BEHAVIOR.md) for the full behavioral s
 
 ### Phase 1 — Command center
 
-- [ ] Lead feed with explainable priority scoring
-- [ ] Pipeline stages: `new` → `contacted` → `qualified` → `showing` → `offer` → `closed` / `lost`
-- [ ] Activity log (calls, texts, emails, notes, site events)
-- [ ] Approval queue for AI-drafted messages
+- [x] Lead feed with explainable priority scoring
+- [x] Pipeline stages: `new` → `contacted` → `qualified` → `showing` → `offer` → `closed` / `lost`
+- [x] Activity log (calls, texts, emails, notes, site events)
+- [x] Approval queue for AI-drafted messages
 
 ### Phase 2 — Reactive intelligence
 
@@ -79,7 +79,15 @@ cd REAL-CRM-for-realtors
 npm install
 cp .env.example .env
 ollama serve
-npm run dev
+npm run seed    # optional demo leads
+npm run dev     # http://localhost:3000
+```
+
+### CLI
+
+```bash
+npm run cli feed 10      # ranked lead feed in terminal
+npm run cli approvals    # pending drafts
 ```
 
 ## Data Storage
@@ -118,9 +126,14 @@ Project rules: `.cursorrules` — local Ollama only, approval-first, realistic a
 REAL-CRM-for-realtors/
 ├── .cursorrules
 ├── docs/
-│   └── AGENT-BEHAVIOR.md   # Behavioral spec (read this first)
+│   └── AGENT-BEHAVIOR.md
+├── public/                 # Dashboard UI
+├── src/
+│   ├── services/           # leads, feed, activities, approvals, ollama
+│   ├── server.js           # HTTP API
+│   └── seed.js             # Demo data
 ├── data/                   # Local storage (gitignored)
-├── src/                    # Application source
+├── tests/
 ├── package.json
 └── README.md
 ```
@@ -128,9 +141,10 @@ REAL-CRM-for-realtors/
 ## Development
 
 ```bash
-npm run dev      # Start with file watching
-npm run lint     # Lint source
-npm run test     # Run tests
+npm run dev      # Dashboard + API on :3000
+npm run seed     # Load demo leads
+npm run cli feed # Terminal lead feed
+npm test         # Run tests
 ```
 
 ## Security
