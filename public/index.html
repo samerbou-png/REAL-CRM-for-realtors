@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>REAL CRM — Lead Feed</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header>
+      <div>
+        <h1>REAL CRM</h1>
+        <p>Reactive intelligence with approval-first drafts</p>
+      </div>
+      <div class="header-actions">
+        <button class="secondary" id="process-cold">Process Cold Leads</button>
+        <button class="secondary" id="process-campaigns">Process Drips</button>
+        <div class="badge" id="health">Checking Ollama…</div>
+      </div>
+    </header>
+
+    <main>
+      <section class="panel panel-wide">
+        <h2>Lead Feed</h2>
+        <div id="feed" class="empty">Loading…</div>
+      </section>
+
+      <section class="panel">
+        <h2>Approval Queue</h2>
+        <div id="approvals" class="empty">Loading…</div>
+      </section>
+
+      <section class="panel">
+        <h2>Drip Campaigns</h2>
+        <div id="campaigns" class="empty">Loading…</div>
+      </section>
+    </main>
+
+    <script>
+      async function api(path, options) {
+        const response = await fetch(path, {
+          headers: { 'Content-Type': 'application/json' },
+          ...options,
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload.error || 'Request failed');
+        }
+        return payload;
+      }
+
+      function renderFeed(feed) {
+        const container = document.getElementById('feed');
+        if (!feed.length) {
+          container.innerHTML = '<div class="empty">No active leads. Run <code>npm run seed</code>.</div>';
+          return;
+        }
+
+        container.innerHTML = feed
+          .map(
+            (lead) => `
+          <article class="lead-card">
+            <div class="lead-top">
+              <div>
+                <strong>${lead.first_name} ${lead.last_name}</strong>
+                <div class="stage">${lead.stage} · ${lead.source}</div>
+              </div>
+              <div class="score">${lead.priority_score}</div>
+            </div>
+            ${lead.ai_insight ? `<p class="insight"><strong>AI:</strong> ${lead.ai_insight.headline}</p>` : ''}
+            ${lead.ai_insight ? `<p class="talking-point">Next: ${lead.ai_insight.next_action} — ${lead.ai_insight.talking_point}</p>` : ''}
+            <ul class="reasons">
+              ${lead.reasons.map((reason) => `<li>${reason}</li>`).join('')}
+            </ul>
+          </article>`,
+          )
+          .join('');
+      }
+
+      function renderApprovals(approvals) {
+        const container = document.getElementById('approvals');
+        if (!approvals.length) {
+          container.innerHTML = '<div class="empty">No drafts waiting for review.</div>';
+          return;
+        }
+
+        container.innerHTML = approvals
+          .map(
+            (approval) => `
+          <article class="approval-card" data-id="${approval.id}">
+            <div class="approval-top">
+              <div>
+                <strong>${approval.summary || 'Draft message'}</strong>
+                <div class="stage">${approval.confidence} confidence · ${approval.trigger}</div>
+              </div>
+            </div>
+            <div class="draft" contenteditable="true" id="draft-${approval.id}">${approval.original_draft}</div>
+            <div class="actions">
+              <button class="primary" data-action="approve" data-id="${approval.id}">Approve</button>
+              <button class="secondary" data-action="send" data-id="${approval.id}">Mark Sent</button>
+              <button class="danger" data-action="reject" data-id="${approval.id}">Reject</button>
+            </div>
+          </article>`,
+          )
+          .join('');
+      }
+
+      function renderCampaigns(campaigns) {
+        const container = document.getElementById('campaigns');
+        if (!campaigns.length) {
+          container.innerHTML = '<div class="empty">No campaigns yet.</div>';
+          return;
+        }
+
+        container.innerHTML = campaigns
+          .map(
+            (campaign) => `
+          <article class="campaign-card">
+            <strong>${campaign.name}</strong>
+            <div class="stage">${campaign.steps.length} steps · ${campaign.enrollments.length} enrolled</div>
+            <ul class="reasons">
+              ${campaign.steps.map((step) => `<li>Step ${step.step_order}: ${step.summary} (+${step.delay_days}d)</li>`).join('')}
+            </ul>
+          </article>`,
+          )
+          .join('');
+      }
+
+      async function refresh() {
+        const [{ feed }, { approvals }, { campaigns }, health] = await Promise.all([
+          api('/api/feed?insights=1'),
+          api('/api/approvals/pending'),
+          api('/api/campaigns'),
+          api('/api/health'),
+        ]);
+
+        document.getElementById('health').textContent = health.ollama
+          ? 'Ollama connected'
+          : 'Ollama offline (fallback insights)';
+
+        renderFeed(feed);
+        renderApprovals(approvals);
+        renderCampaigns(campaigns);
+      }
+
+      document.getElementById('process-cold').addEventListener('click', async () => {
+        const result = await api('/api/cold-leads/process', { method: 'POST' });
+        alert(`Processed ${result.processed} gone-cold lead(s).`);
+        await refresh();
+      });
+
+      document.getElementById('process-campaigns').addEventListener('click', async () => {
+        const result = await api('/api/campaigns/process', { method: 'POST' });
+        alert(`Queued ${result.processed} drip draft(s) for approval.`);
+        await refresh();
+      });
+
+      document.body.addEventListener('click', async (event) => {
+        const button = event.target.closest('button[data-action]');
+        if (!button) {
+          return;
+        }
+
+        const approvalId = button.dataset.id;
+        const action = button.dataset.action;
+        const draftNode = document.getElementById(`draft-${approvalId}`);
+        const finalMessage = draftNode?.textContent?.trim() ?? '';
+
+        try {
+          if (action === 'approve') {
+            await api(`/api/approvals/${approvalId}/approve`, {
+              method: 'POST',
+              body: JSON.stringify({ final_message: finalMessage }),
+            });
+          }
+
+          if (action === 'reject') {
+            await api(`/api/approvals/${approvalId}/reject`, {
+              method: 'POST',
+              body: JSON.stringify({ reason: 'Rejected from dashboard' }),
+            });
+            await refresh();
+            return;
+          }
+
+          if (action === 'send') {
+            await api(`/api/approvals/${approvalId}/approve`, {
+              method: 'POST',
+              body: JSON.stringify({ final_message: finalMessage }),
+            });
+            await api(`/api/approvals/${approvalId}/send`, { method: 'POST' });
+          }
+
+          await refresh();
+        } catch (error) {
+          alert(error.message);
+        }
+      });
+
+      refresh().catch((error) => {
+        document.getElementById('feed').textContent = error.message;
+      });
+    </script>
+  </body>
+</html>
